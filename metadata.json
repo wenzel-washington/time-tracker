@@ -1,0 +1,5 @@
+{
+  "name": "Time Tracker",
+  "description": "A local-first time tracker with optional Firebase sync, project summaries, and CSV export.",
+  "requestFramePermissions": []
+}

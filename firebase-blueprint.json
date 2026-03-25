@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A project that time entries can be associated with.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the project."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the project."
+        },
+        "colorClass": {
+          "type": "string",
+          "description": "The tailwind color class associated with the project."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO string representing when the project was created."
+        },
+        "uid": {
+          "type": "string",
+          "description": "The user ID of the project owner."
+        }
+      },
+      "required": ["id", "name", "colorClass", "createdAt", "uid"]
+    },
+    "Entry": {
+      "title": "Time Entry",
+      "description": "A recorded time entry for a specific project.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the entry."
+        },
+        "projectId": {
+          "type": "string",
+          "description": "The ID of the project this entry belongs to."
+        },
+        "task": {
+          "type": "string",
+          "description": "A description of the work done."
+        },
+        "startTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO string representing when the entry started."
+        },
+        "endTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO string representing when the entry ended. Null if still running."
+        },
+        "durationSeconds": {
+          "type": "number",
+          "description": "The duration of the entry in seconds."
+        },
+        "uid": {
+          "type": "string",
+          "description": "The user ID of the entry owner."
+        }
+      },
+      "required": ["id", "projectId", "task", "startTime", "durationSeconds", "uid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/projects/{projectId}": {
+      "schema": {
+        "$ref": "#/entities/Project"
+      },
+      "description": "Projects owned by the user."
+    },
+    "/users/{userId}/entries/{entryId}": {
+      "schema": {
+        "$ref": "#/entities/Entry"
+      },
+      "description": "Time entries owned by the user."
+    }
+  }
+}

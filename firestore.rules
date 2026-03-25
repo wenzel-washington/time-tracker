@@ -1,0 +1,123 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}.*$");
+    }
+
+    function projectDocumentExists(userId, projectId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/projects/$(projectId));
+    }
+
+    function isValidProjectCreate(userId, projectId) {
+      return request.resource.data.keys().hasAll([
+               'id',
+               'name',
+               'colorClass',
+               'createdAt',
+               'uid'
+             ]) &&
+             request.resource.data.keys().hasOnly([
+               'id',
+               'name',
+               'colorClass',
+               'createdAt',
+               'uid'
+             ]) &&
+             request.resource.data.id is string &&
+             request.resource.data.id == projectId &&
+             request.resource.data.id.size() > 0 &&
+             request.resource.data.id.size() <= 50 &&
+             request.resource.data.name is string &&
+             request.resource.data.name.size() > 0 &&
+             request.resource.data.name.size() <= 100 &&
+             request.resource.data.colorClass is string &&
+             request.resource.data.colorClass.size() > 0 &&
+             request.resource.data.colorClass.size() <= 100 &&
+             request.resource.data.createdAt is string &&
+             isValidDateString(request.resource.data.createdAt) &&
+             request.resource.data.uid is string &&
+             request.resource.data.uid == userId;
+    }
+
+    function isValidProjectUpdate(userId, projectId) {
+      return isValidProjectCreate(userId, projectId) &&
+             request.resource.data.createdAt == resource.data.createdAt &&
+             request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasValidOptionalEndTime() {
+      return !('endTime' in request.resource.data) ||
+             request.resource.data.endTime == null ||
+             isValidDateString(request.resource.data.endTime);
+    }
+
+    function isValidEntryCreate(userId, entryId) {
+      return request.resource.data.keys().hasAll([
+               'id',
+               'projectId',
+               'task',
+               'startTime',
+               'durationSeconds',
+               'uid'
+             ]) &&
+             request.resource.data.keys().hasOnly([
+               'id',
+               'projectId',
+               'task',
+               'startTime',
+               'endTime',
+               'durationSeconds',
+               'uid'
+             ]) &&
+             request.resource.data.id is string &&
+             request.resource.data.id == entryId &&
+             request.resource.data.id.size() > 0 &&
+             request.resource.data.id.size() <= 50 &&
+             request.resource.data.projectId is string &&
+             request.resource.data.projectId.size() > 0 &&
+             request.resource.data.projectId.size() <= 50 &&
+             projectDocumentExists(userId, request.resource.data.projectId) &&
+             request.resource.data.task is string &&
+             request.resource.data.task.size() > 0 &&
+             request.resource.data.task.size() <= 500 &&
+             request.resource.data.startTime is string &&
+             isValidDateString(request.resource.data.startTime) &&
+             hasValidOptionalEndTime() &&
+             request.resource.data.durationSeconds is int &&
+             request.resource.data.durationSeconds >= 0 &&
+             request.resource.data.durationSeconds <= 315360000 &&
+             request.resource.data.uid is string &&
+             request.resource.data.uid == userId;
+    }
+
+    function isValidEntryUpdate(userId, entryId) {
+      return isValidEntryCreate(userId, entryId) &&
+             request.resource.data.uid == resource.data.uid &&
+             request.resource.data.id == resource.data.id;
+    }
+
+    match /users/{userId}/projects/{projectId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidProjectCreate(userId, projectId);
+      allow update: if isOwner(userId) && isValidProjectUpdate(userId, projectId);
+      allow delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/entries/{entryId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidEntryCreate(userId, entryId);
+      allow update: if isOwner(userId) && isValidEntryUpdate(userId, entryId);
+      allow delete: if isOwner(userId);
+    }
+  }
+}
