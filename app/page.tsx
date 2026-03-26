@@ -57,6 +57,7 @@ const COLORS = [
 const DEFAULT_PROJECT_ID = 'default-project';
 const DEFAULT_PROJECT_NAME = 'My First Project';
 const DEFAULT_PROJECT_COLOR = COLORS[0];
+const ACTIVE_PROJECT_STORAGE_KEY = 'timeTracker_activeProjectId';
 
 const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
@@ -290,10 +291,11 @@ export default function TimeTracker() {
      const fetchedProjects = snapshot.docs.map(doc => doc.data() as Project);
      if (fetchedProjects.length > 0) {
        setProjects(fetchedProjects);
-       // Ensure active project is valid
-       if (!fetchedProjects.find(p => p.id === activeProjectId)) {
-         setActiveProjectId(fetchedProjects[0].id);
-       }
+       setActiveProjectId((currentProjectId) =>
+         fetchedProjects.find((project) => project.id === currentProjectId)
+           ? currentProjectId
+           : fetchedProjects[0].id
+       );
      } else {
        const seedKey = `timeTracker_seededCloudProject_${user.uid}`;
        const hasSeededDefaultProject = localStorage.getItem(seedKey) === 'true';
@@ -339,12 +341,16 @@ export default function TimeTracker() {
    // Load from local storage
    const savedEntries = localStorage.getItem('timeTracker_entries');
    const savedProjects = localStorage.getItem('timeTracker_projects');
+   const savedActiveProjectId = localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY);
    if (savedEntries) setEntries(JSON.parse(savedEntries));
    if (savedProjects) {
      const parsedProjects = JSON.parse(savedProjects) as Project[];
      if (parsedProjects.length > 0) {
        setProjects(parsedProjects);
-       setActiveProjectId(parsedProjects[0].id);
+       const nextActiveProjectId = parsedProjects.find((project) => project.id === savedActiveProjectId)
+         ? savedActiveProjectId!
+         : parsedProjects[0].id;
+       setActiveProjectId(nextActiveProjectId);
      } else {
        setProjects([createDefaultProject()]);
        setActiveProjectId(DEFAULT_PROJECT_ID);
@@ -354,7 +360,7 @@ export default function TimeTracker() {
      setActiveProjectId(DEFAULT_PROJECT_ID);
    }
  }
-}, [user, isAuthReady, activeProjectId]);
+}, [user, isAuthReady]);
 
  useEffect(() => {
  if (mounted) {
@@ -362,9 +368,10 @@ export default function TimeTracker() {
    if (!user) {
      localStorage.setItem('timeTracker_entries', JSON.stringify(entries));
      localStorage.setItem('timeTracker_projects', JSON.stringify(projects));
+     localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, activeProjectId);
    }
  }
-}, [entries, projects, isDarkMode, mounted, user]);
+}, [entries, projects, isDarkMode, mounted, user, activeProjectId]);
 
  useEffect(() => {
  function handleClickOutside(event: MouseEvent) {
