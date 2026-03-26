@@ -59,7 +59,15 @@ const DEFAULT_PROJECT_NAME = 'My First Project';
 const DEFAULT_PROJECT_COLOR = COLORS[0];
 const ACTIVE_PROJECT_STORAGE_KEY = 'timeTracker_activeProjectId';
 
-const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
+const getNextProjectColor = (existingProjects: Project[]) => {
+ const firstUnusedColor = COLORS.find((color) =>
+   !existingProjects.some((project) => project.colorClass === color)
+ );
+
+ if (firstUnusedColor) return firstUnusedColor;
+
+ return COLORS[existingProjects.length % COLORS.length];
+};
 
 const createDefaultProject = (uid?: string): Project => ({
  id: DEFAULT_PROJECT_ID,
@@ -495,7 +503,7 @@ export default function TimeTracker() {
  const newProject: Project = {
  id: Date.now().toString(),
  name: newProjectName.trim(),
- colorClass: getRandomColor(),
+ colorClass: getNextProjectColor(projects),
  createdAt: new Date().toISOString(),
  uid: user?.uid
 };
@@ -565,11 +573,12 @@ export default function TimeTracker() {
  document.body.removeChild(link);
 };
 
- const formatDurationHHMM = (totalSeconds: number) => {
+ const formatDuration = (totalSeconds: number) => {
  const hours = Math.floor(totalSeconds / 3600);
  const minutes = Math.floor((totalSeconds % 3600) / 60);
+ const seconds = totalSeconds % 60;
  
- return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+ return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
  const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
@@ -770,7 +779,7 @@ export default function TimeTracker() {
  <div className="w-full overflow-x-auto">
  <div className="min-w-full lg:min-w-[1100px] pb-32">
  {/* Table Header */}
-   <div className="hidden lg:grid grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_minmax(120px,1fr)_60px] gap-0 p-0 border-b border-border-main text-sm text-text-main font-medium bg-surface/80 rounded-t-xl items-stretch">
+   <div className="hidden lg:grid grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_60px] gap-0 p-0 border-b border-border-main text-sm text-text-main font-medium bg-surface/80 rounded-t-xl items-stretch">
    <div className="flex items-center gap-2 p-3 border-r border-border-main/50"><CheckCircle className="w-4 h-4" /> Task</div>
    <div className="flex items-center gap-2 p-3 border-r border-border-main/50"><Folder className="w-4 h-4" /> Project</div>
    <div className="flex items-center gap-2 p-3 border-r border-border-main/50"><Settings2 className="w-4 h-4" /> Timer</div>
@@ -781,7 +790,7 @@ export default function TimeTracker() {
  </div>
 
  {/* Active Timer Row */}
-   <div className={`group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_minmax(120px,1fr)_60px] gap-0 p-0 border-b border-border-main lg:items-stretch transition-colors ${isRunning && !isPaused ? "bg-primary/10" : "hover:bg-surface"}`}>
+   <div className={`group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_60px] gap-0 p-0 border-b border-border-main lg:items-stretch transition-colors ${isRunning && !isPaused ? "bg-primary/10" : "hover:bg-surface"}`}>
  <div className="flex items-center gap-2 p-3 border-r border-border-main/50 min-w-0">
  <FileText className="w-4 h-4 text-primary shrink-0" />
  <input 
@@ -905,7 +914,7 @@ export default function TimeTracker() {
  <div className="p-3 border-r border-border-main/50 flex items-center">
  <div className="text-sm font-mono text-primary font-medium flex items-center lg:pl-0">
  <span className="lg:hidden text-xs text-secondary font-sans font-normal mr-2">Duration:</span>
- {formatDurationHHMM(displayDuration)}
+ {formatDuration(displayDuration)}
  </div>
  </div>
  
@@ -941,7 +950,7 @@ export default function TimeTracker() {
  {entries.map((entry) => {
  const project = projects.find(p => p.id === entry.projectId);
  return (
-   <div key={entry.id} className="group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_minmax(120px,1fr)_60px] gap-0 p-0 border-b border-border-main lg:items-stretch hover:bg-surface transition-colors">
+   <div key={entry.id} className="group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_60px] gap-0 p-0 border-b border-border-main lg:items-stretch hover:bg-surface transition-colors">
   <div className="flex items-center gap-2 p-3 border-r border-border-main/50 min-w-0">
  <Clock className="w-4 h-4 text-primary shrink-0" />
  <input 
@@ -978,7 +987,7 @@ export default function TimeTracker() {
  </div>
  <div className="p-3 border-r border-border-main/50 flex items-center text-sm font-mono text-primary font-medium lg:pl-0">
  <span className="lg:hidden text-xs text-secondary/70 font-sans font-normal mr-2">Duration:</span>
- {formatDurationHHMM(entry.durationSeconds)}
+ {formatDuration(entry.durationSeconds)}
  </div>
  <div className="relative flex justify-center p-3">
  <button 
@@ -1016,9 +1025,9 @@ export default function TimeTracker() {
  {project.name}
  </span>
  </div>
- <div className="text-sm font-mono text-secondary">{formatDurationHHMM(project.todaySeconds)}</div>
- <div className="text-sm font-mono text-secondary">{formatDurationHHMM(project.weekSeconds)}</div>
- <div className="text-sm font-mono text-text-main font-medium">{formatDurationHHMM(project.totalSeconds)}</div>
+ <div className="text-sm font-mono text-secondary">{formatDuration(project.todaySeconds)}</div>
+ <div className="text-sm font-mono text-secondary">{formatDuration(project.weekSeconds)}</div>
+ <div className="text-sm font-mono text-text-main font-medium">{formatDuration(project.totalSeconds)}</div>
             <div className="relative flex justify-center p-3">
               <button 
                 onClick={() => setProjectToDelete(project)}
