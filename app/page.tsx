@@ -41,6 +41,19 @@ type TimeEntry = {
  uid?: string;
 };
 
+type LocalTrackerState = {
+ entries: TimeEntry[];
+ projects: Project[];
+ activeProjectId: string;
+ activeTask: string;
+ isRunning: boolean;
+ isPaused: boolean;
+ startTime: string;
+ endTime: string;
+ elapsedSeconds: number;
+ viewMode: 'all' | 'project';
+};
+
 const COLORS = [
  'bg-[#E8E3D9] text-[#5C544E]',
  'bg-[#EEDFD8] text-[#8A5A44]',
@@ -57,7 +70,34 @@ const COLORS = [
 const DEFAULT_PROJECT_ID = 'default-project';
 const DEFAULT_PROJECT_NAME = 'My First Project';
 const DEFAULT_PROJECT_COLOR = COLORS[0];
+const LOCAL_TRACKER_STATE_STORAGE_KEY = 'timeTracker_localState';
 const ACTIVE_PROJECT_STORAGE_KEY = 'timeTracker_activeProjectId';
+
+const parseStoredJson = <T,>(value: string | null): T | null => {
+ if (!value) return null;
+
+ try {
+   return JSON.parse(value) as T;
+ } catch {
+   return null;
+ }
+};
+
+const getStoredProjects = (storedProjects?: Project[] | null, uid?: string) => {
+ if (storedProjects && storedProjects.length > 0) {
+   return storedProjects;
+ }
+
+ return [createDefaultProject(uid)];
+};
+
+const getStoredActiveProjectId = (storedActiveProjectId: string | null | undefined, availableProjects: Project[]) => {
+ if (storedActiveProjectId && availableProjects.some((project) => project.id === storedActiveProjectId)) {
+   return storedActiveProjectId;
+ }
+
+ return availableProjects[0]?.id ?? DEFAULT_PROJECT_ID;
+};
 
 const getNextProjectColor = (existingProjects: Project[]) => {
  const firstUnusedColor = COLORS.find((color) =>
@@ -248,6 +288,7 @@ export default function TimeTracker() {
  const [isDarkMode, setIsDarkMode] = useState(false);
  const [user, setUser] = useState<User | null>(null);
  const [isAuthReady, setIsAuthReady] = useState(false);
+ const [isStateHydrated, setIsStateHydrated] = useState(false);
  
  const [projects, setProjects] = useState<Project[]>(() => [createDefaultProject()]);
  
@@ -291,6 +332,7 @@ export default function TimeTracker() {
  if (!isAuthReady) return;
 
  if (user && db) {
+   setIsStateHydrated(true);
    const firestore = db;
    // Sync Projects
    const projectsRef = collection(firestore, `users/${user.uid}/projects`);
@@ -346,40 +388,65 @@ export default function TimeTracker() {
      unsubscribeEntries();
    };
  } else {
-   // Load from local storage
-   const savedEntries = localStorage.getItem('timeTracker_entries');
-   const savedProjects = localStorage.getItem('timeTracker_projects');
-   const savedActiveProjectId = localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY);
-   if (savedEntries) setEntries(JSON.parse(savedEntries));
-   if (savedProjects) {
-     const parsedProjects = JSON.parse(savedProjects) as Project[];
-     if (parsedProjects.length > 0) {
-       setProjects(parsedProjects);
-       const nextActiveProjectId = parsedProjects.find((project) => project.id === savedActiveProjectId)
-         ? savedActiveProjectId!
-         : parsedProjects[0].id;
-       setActiveProjectId(nextActiveProjectId);
-     } else {
-       setProjects([createDefaultProject()]);
-       setActiveProjectId(DEFAULT_PROJECT_ID);
-     }
-   } else {
-     setProjects([createDefaultProject()]);
-     setActiveProjectId(DEFAULT_PROJECT_ID);
-   }
+   const storedState = parseStoredJson<LocalTrackerState>(localStorage.getItem(LOCAL_TRACKER_STATE_STORAGE_KEY));
+   const legacyEntries = parseStoredJson<TimeEntry[]>(localStorage.getItem('timeTracker_entries')) ?? [];
+   const legacyProjects = parseStoredJson<Project[]>(localStorage.getItem('timeTracker_projects'));
+   const nextProjects = getStoredProjects(storedState?.projects ?? legacyProjects);
+   const nextActiveProjectId = getStoredActiveProjectId(
+     storedState?.activeProjectId ?? localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY),
+     nextProjects
+   );
+
+   setEntries(storedState?.entries ?? legacyEntries);
+   setProjects(nextProjects);
+   setActiveProjectId(nextActiveProjectId);
+   setActiveTask(storedState?.activeTask ?? "");
+   setIsRunning(Boolean(storedState?.isRunning && storedState?.startTime));
+   setIsPaused(Boolean(storedState?.isPaused));
+   setStartTime(storedState?.startTime ?? "");
+   setEndTime(storedState?.endTime ?? "");
+   setElapsedSeconds(typeof storedState?.elapsedSeconds === 'number' ? storedState.elapsedSeconds : 0);
+   setViewMode(storedState?.viewMode === 'project' ? 'project' : 'all');
+   setIsStateHydrated(true);
  }
 }, [user, isAuthReady]);
 
  useEffect(() => {
- if (mounted) {
-   localStorage.setItem('timeTracker_darkMode', JSON.stringify(isDarkMode));
-   if (!user) {
-     localStorage.setItem('timeTracker_entries', JSON.stringify(entries));
-     localStorage.setItem('timeTracker_projects', JSON.stringify(projects));
-     localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, activeProjectId);
-   }
+ if (!mounted) return;
+
+ localStorage.setItem('timeTracker_darkMode', JSON.stringify(isDarkMode));
+
+ if (!isAuthReady || !isStateHydrated || user) return;
+
+ const persistedProjects = getStoredProjects(projects);
+ const persistedActiveProjectId = getStoredActiveProjectId(activeProjectId, persistedProjects);
+ const persistedState: LocalTrackerState = {
+   entries,
+   projects: persistedProjects,
+   activeProjectId: persistedActiveProjectId,
+   activeTask,
+   isRunning: Boolean(isRunning && startTime),
+   isPaused,
+   startTime,
+   endTime,
+   elapsedSeconds,
+   viewMode,
+ };
+
+ localStorage.setItem(LOCAL_TRACKER_STATE_STORAGE_KEY, JSON.stringify(persistedState));
+ localStorage.setItem('timeTracker_entries', JSON.stringify(entries));
+ localStorage.setItem('timeTracker_projects', JSON.stringify(persistedProjects));
+ localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, persistedActiveProjectId);
+}, [entries, projects, isDarkMode, mounted, user, activeProjectId, isAuthReady, isStateHydrated, activeTask, isRunning, isPaused, startTime, endTime, elapsedSeconds, viewMode]);
+
+ useEffect(() => {
+ if (!projects.length) return;
+
+ const nextActiveProjectId = getStoredActiveProjectId(activeProjectId, projects);
+ if (nextActiveProjectId !== activeProjectId) {
+   setActiveProjectId(nextActiveProjectId);
  }
-}, [entries, projects, isDarkMode, mounted, user, activeProjectId]);
+}, [projects, activeProjectId]);
 
  useEffect(() => {
  function handleClickOutside(event: MouseEvent) {
@@ -441,6 +508,7 @@ export default function TimeTracker() {
  let finalStartTime = startTime;
  let finalEndTime = endTime;
  let finalElapsed = displayDuration;
+ const resolvedProjectId = getStoredActiveProjectId(activeProjectId, getStoredProjects(projects));
 
  if (isRunning) {
  const now = new Date();
@@ -459,7 +527,7 @@ export default function TimeTracker() {
  const newEntry: TimeEntry = {
  id: Date.now().toString(),
  task: activeTask || 'Untitled',
- projectId: activeProjectId,
+ projectId: resolvedProjectId,
  startTime: finalStartTime,
  endTime: finalEndTime,
  durationSeconds: finalElapsed,
@@ -471,7 +539,7 @@ export default function TimeTracker() {
      handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}/entries/${newEntry.id}`);
    });
  } else {
-   setEntries([newEntry, ...entries]);
+   setEntries((currentEntries) => [newEntry, ...currentEntries]);
  }
  
  setIsRunning(false);
@@ -513,7 +581,7 @@ export default function TimeTracker() {
      handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}/projects/${newProject.id}`);
    });
  } else {
-   setProjects([...projects, newProject]);
+   setProjects((currentProjects) => [...currentProjects, newProject]);
  }
  
  setActiveProjectId(newProject.id);
@@ -603,7 +671,7 @@ export default function TimeTracker() {
      handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}/entries/${id}`);
    });
  } else {
-   setEntries(entries.map(entry => entry.id === id ? updated : entry));
+   setEntries((currentEntries) => currentEntries.map((entry) => entry.id === id ? updated : entry));
  }
 };
 
@@ -663,7 +731,7 @@ export default function TimeTracker() {
 };
 });
 
- if (!mounted) return null; // Prevent hydration mismatch
+ if (!mounted || !isAuthReady || !isStateHydrated) return null; // Prevent hydration mismatch and local state races
 
  return (
  <div className={`${isDarkMode ? 'dark' : ''}`}>
@@ -777,9 +845,9 @@ export default function TimeTracker() {
  {/* Table Container */}
  {viewMode === 'all' ? (
  <div className="w-full overflow-x-auto">
- <div className="min-w-full lg:min-w-[1100px] pb-32">
+ <div className="min-w-full lg:min-w-[1160px] pb-32">
  {/* Table Header */}
-   <div className="hidden lg:grid grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_60px] gap-0 p-0 border-b border-border-main text-sm text-text-main font-medium bg-surface/80 rounded-t-xl items-stretch">
+   <div className="hidden lg:grid grid-cols-[minmax(200px,2fr)_minmax(140px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_120px] gap-0 p-0 border-b border-border-main text-sm text-text-main font-medium bg-surface/80 rounded-t-xl items-stretch">
    <div className="flex items-center gap-2 p-3 border-r border-border-main/50"><CheckCircle className="w-4 h-4" /> Task</div>
    <div className="flex items-center gap-2 p-3 border-r border-border-main/50"><Folder className="w-4 h-4" /> Project</div>
    <div className="flex items-center gap-2 p-3 border-r border-border-main/50"><Settings2 className="w-4 h-4" /> Timer</div>
@@ -790,7 +858,7 @@ export default function TimeTracker() {
  </div>
 
  {/* Active Timer Row */}
-   <div className={`group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_60px] gap-0 p-0 border-b border-border-main lg:items-stretch transition-colors ${isRunning && !isPaused ? "bg-primary/10" : "hover:bg-surface"}`}>
+   <div className={`group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(140px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_120px] gap-0 p-0 border-b border-border-main lg:items-stretch transition-colors ${isRunning && !isPaused ? "bg-primary/10" : "hover:bg-surface"}`}>
  <div className="flex items-center gap-2 p-3 border-r border-border-main/50 min-w-0">
  <FileText className="w-4 h-4 text-primary shrink-0" />
  <input 
@@ -912,17 +980,17 @@ export default function TimeTracker() {
 
  {/* Duration */}
  <div className="p-3 border-r border-border-main/50 flex items-center">
- <div className="text-sm font-mono text-primary font-medium flex items-center lg:pl-0">
+ <div className="text-sm font-mono tabular-nums text-primary font-medium flex items-center whitespace-nowrap lg:pl-0">
  <span className="lg:hidden text-xs text-secondary font-sans font-normal mr-2">Duration:</span>
  {formatDuration(displayDuration)}
  </div>
  </div>
  
- <div className="relative flex justify-center p-3 items-center">
+ <div className="relative flex items-center justify-start p-3 pl-2">
  {(!isRunning && !isPaused && startTime && endTime) && (
  <button
  onClick={handleStop}
- className="p-1.5 rounded bg-primary text-white hover:bg-primary/90 transition-all shadow-sm flex items-center gap-1 px-2"
+ className="flex w-full max-w-[88px] items-center justify-center gap-1 rounded bg-primary px-2 py-1.5 text-white shadow-sm transition-all hover:bg-primary/90"
  title="Save Entry"
  >
  <Check className="w-4 h-4" />
@@ -938,7 +1006,7 @@ export default function TimeTracker() {
  setElapsedSeconds(0);
  setActiveTask("");
 }}
- className="p-1.5 rounded hover:bg-red-50 dark:bg-red-900/20 text-secondary/70 hover:text-red-600 dark:text-red-400 transition-all opacity-0 group-hover:opacity-100"
+ className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1.5 text-secondary/70 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 dark:bg-red-900/20 dark:text-red-400"
  title="Clear Timer"
  >
  <Trash2 className="w-4 h-4" />
@@ -950,7 +1018,7 @@ export default function TimeTracker() {
  {entries.map((entry) => {
  const project = projects.find(p => p.id === entry.projectId);
  return (
-   <div key={entry.id} className="group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(120px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_60px] gap-0 p-0 border-b border-border-main lg:items-stretch hover:bg-surface transition-colors">
+   <div key={entry.id} className="group flex flex-col lg:grid lg:grid-cols-[minmax(200px,2fr)_minmax(140px,1fr)_100px_minmax(180px,1.2fr)_minmax(180px,1.2fr)_140px_120px] gap-0 p-0 border-b border-border-main lg:items-stretch hover:bg-surface transition-colors">
   <div className="flex items-center gap-2 p-3 border-r border-border-main/50 min-w-0">
  <Clock className="w-4 h-4 text-primary shrink-0" />
  <input 
@@ -985,7 +1053,7 @@ export default function TimeTracker() {
  onChange={(val) => updateEntry(entry.id, 'endTime', val)}
  />
  </div>
- <div className="p-3 border-r border-border-main/50 flex items-center text-sm font-mono text-primary font-medium lg:pl-0">
+ <div className="p-3 border-r border-border-main/50 flex items-center text-sm font-mono tabular-nums text-primary font-medium whitespace-nowrap lg:pl-0">
  <span className="lg:hidden text-xs text-secondary/70 font-sans font-normal mr-2">Duration:</span>
  {formatDuration(entry.durationSeconds)}
  </div>
