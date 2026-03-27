@@ -17,7 +17,7 @@ import {
  Play, Pause, Square, Clock, Folder, 
  List, Plus, Hourglass, 
  CheckCircle, LayoutGrid, Settings2, ChevronDown,
- FileText, Check, Trash2, Github, Sun, Moon, Download, LogOut, HardDrive
+ FileText, Check, Trash2, Sun, Moon, Download, LogOut, HardDrive
 } from 'lucide-react';
 import { auth, db, googleProvider, isFirebaseConfigured } from '../firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
@@ -748,8 +748,7 @@ export default function TimeTracker() {
      </div>
      <p className="text-sm text-secondary/90 max-w-2xl leading-relaxed">
        A simple, privacy-friendly tool to track the time you spend on your tasks. Hit start to begin tracking. 
-       Your data is saved locally in your browser by default. Add your own Firebase config 
-       to enable Google sign-in and cloud sync across devices.
+       Either use local mode or sign in with Google and cloud sync across devices.
      </p>
    </div>
    <div className="flex-shrink-0">
@@ -1153,14 +1152,12 @@ export default function TimeTracker() {
       )}
 
       {/* Footer */}
- <footer className="mt-16 pt-8 border-t border-border-main flex flex-col sm:flex-row items-center justify-between text-sm text-secondary pb-4">
- <div>Local-first time tracking with optional cloud sync.</div>
- <div className="mt-4 sm:mt-0">
- <a href="https://github.com/wenzel-washington/time-tracker" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-text-main transition-colors">
- <Github className="w-4 h-4" />
- <span>View source on GitHub</span>
+ <footer className="mt-16 pt-8 border-t border-border-main text-sm text-secondary pb-4">
+ <a href="https://futurenaut.co" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 hover:text-text-main transition-colors">
+ <span>Built with</span>
+ <span className="text-primary" aria-hidden="true">love</span>
+ <span>by futurenaut.co</span>
  </a>
- </div>
  </footer>
  </div>
  </div>
